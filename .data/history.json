@@ -4,26 +4,26 @@
         "MAC": "AB",
         "SentMessages":
         [
-            "Hi Anne, nice that you're here!",
-            "I'm doing just fine, how was your day?",
-            "Glad to hear that, see you later then:)"
+            {"timestamp": "2025-11-08T14:36:20Z", "message": "Hi Anne, nice that you're here!"},
+            {"timestamp": "2025-11-08T14:39:38Z", "message": "I'm doing just fine, how was your day?"},
+            {"timestamp": "2025-11-08T14:41:13Z", "message": "Glad to hear that, see you later then:)"}
         ],
         "ReceivedMessages":
         [
-            "Hey Charles, how u doing?",
-            "Amazing! Let me tell you all about it later over dinner..."
+            {"timestamp": "2025-11-08T14:37:41", "message": "Hey Charles, how u doing?"},
+            {"timestamp": "2025-11-08T14:40:51Z", "message": "Amazing! Let me tell you all about it later over dinner..."}
         ]
     },
     {
         "MAC": "FF",
         "SentMessages":
         [
-            "Hello, everyone! This is Charles.",
-            "Is Anne here?"
+            {"timestamp": "2025-11-08T14:32:05Z", "message": "Hello, everyone! This is Charles."},
+            {"timestamp": "2025-11-08T14:33:09Z", "message": "Is Anne here?"}
         ],
         "ReceivedMessages":
         [
-            "This is Anne."
+            {"timestamp": "2025-11-08T14:34:37Z", "message": "This is Anne."}
         ]
     }
 ]

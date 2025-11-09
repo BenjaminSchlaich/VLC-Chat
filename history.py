@@ -36,6 +36,15 @@ class Conversation:
 
         return cls(mac=_normalize_mac(mac), sent_messages=_messages("SentMessages"), received_messages=_messages("ReceivedMessages"))
 
+    def iter_events(self) -> Iterable[tuple[str, str]]:
+        """Return a best-effort chronological list of message events."""
+        max_len = max(len(self.sent_messages), len(self.received_messages))
+        for idx in range(max_len):
+            if idx < len(self.received_messages):
+                yield ("received", self.received_messages[idx])
+            if idx < len(self.sent_messages):
+                yield ("sent", self.sent_messages[idx])
+
 
 def _normalize_mac(mac: str) -> str:
     if not isinstance(mac, str):
