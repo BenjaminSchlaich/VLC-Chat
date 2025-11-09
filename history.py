@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence
+from typing import Dict, Iterable, List, Sequence, Union, Optional
 
 
 @dataclass
@@ -12,14 +13,14 @@ class Conversation:
     """Container that holds all message history for a single MAC address."""
 
     mac: str
-    sent_messages: List[str] = field(default_factory=list)
-    received_messages: List[str] = field(default_factory=list)
+    sent_messages: List["MessageRecord"] = field(default_factory=list)
+    received_messages: List["MessageRecord"] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Sequence[str]]:
         return {
             "MAC": self.mac,
-            "SentMessages": list(self.sent_messages),
-            "ReceivedMessages": list(self.received_messages),
+            "SentMessages": [record.to_dict(include_ack=True) for record in self.sent_messages],
+            "ReceivedMessages": [record.to_dict(include_ack=False) for record in self.received_messages],
         }
 
     @classmethod
@@ -28,22 +29,76 @@ class Conversation:
         if not isinstance(mac, str) or not mac.strip():
             raise ValueError("Conversation entry is missing a valid MAC address.")
 
-        def _messages(key: str) -> List[str]:
+        def _messages(key: str, *, is_sent: bool) -> List["MessageRecord"]:
             value = payload.get(key, [])
-            if not isinstance(value, list) or not all(isinstance(msg, str) for msg in value):
-                raise ValueError(f"{key} must be a list of strings.")
-            return list(value)
+            if not isinstance(value, list):
+                raise ValueError(f"{key} must be a list.")
+            return [MessageRecord.from_payload(entry, origin=key, is_sent=is_sent) for entry in value]
 
-        return cls(mac=_normalize_mac(mac), sent_messages=_messages("SentMessages"), received_messages=_messages("ReceivedMessages"))
+        return cls(
+            mac=_normalize_mac(mac),
+            sent_messages=_messages("SentMessages", is_sent=True),
+            received_messages=_messages("ReceivedMessages", is_sent=False),
+        )
 
-    def iter_events(self) -> Iterable[tuple[str, str]]:
-        """Return a best-effort chronological list of message events."""
-        max_len = max(len(self.sent_messages), len(self.received_messages))
-        for idx in range(max_len):
-            if idx < len(self.received_messages):
-                yield ("received", self.received_messages[idx])
-            if idx < len(self.sent_messages):
-                yield ("sent", self.sent_messages[idx])
+    def iter_events(self) -> Iterable[tuple[str, "MessageRecord"]]:
+        """Return a chronological list of message events based on timestamps."""
+        events = [("received", rec) for rec in self.received_messages] + [("sent", rec) for rec in self.sent_messages]
+        events.sort(key=lambda item: (item[1].timestamp, 0 if item[0] == "received" else 1))
+        for direction, record in events:
+            yield direction, record
+
+    def copy(self) -> "Conversation":
+        return Conversation(
+            mac=self.mac,
+            sent_messages=[record.copy() for record in self.sent_messages],
+            received_messages=[record.copy() for record in self.received_messages],
+        )
+
+
+@dataclass
+class MessageRecord:
+    timestamp: datetime
+    message: str
+    ack_status: Optional[str] = None
+
+    def to_dict(self, *, include_ack: bool) -> Dict[str, str]:
+        payload = {"timestamp": _format_timestamp(self.timestamp), "message": self.message}
+        if include_ack and self.ack_status is not None:
+            payload["ack"] = self.ack_status
+        return payload
+
+    def copy(self) -> "MessageRecord":
+        return MessageRecord(timestamp=self.timestamp, message=self.message, ack_status=self.ack_status)
+
+    @classmethod
+    def from_payload(cls, payload, *, origin: str, is_sent: bool) -> "MessageRecord":
+        if isinstance(payload, str):
+            # Legacy format without timestamps.
+            fallback_ts = _legacy_timestamp(origin)
+            ack_status = ACK_TRUE if is_sent else None
+            return cls(timestamp=fallback_ts, message=payload, ack_status=ack_status)
+        if not isinstance(payload, dict):
+            raise ValueError(f"Message entries in {origin} must be objects.")
+        if "message" not in payload:
+            raise ValueError(f"Message entry in {origin} missing 'message'.")
+        message = payload["message"]
+        if not isinstance(message, str):
+            raise ValueError("Message text must be a string.")
+
+        timestamp_raw = payload.get("timestamp")
+        if not isinstance(timestamp_raw, str):
+            raise ValueError("Message timestamp must be a string.")
+        timestamp = _parse_timestamp(timestamp_raw)
+        ack_field = payload.get("ack")
+        ack_status = _normalize_ack_status(ack_field) if ack_field is not None else (ACK_TRUE if is_sent else None)
+        return cls(timestamp=timestamp, message=message, ack_status=ack_status)
+
+
+ACK_TRUE = "true"
+ACK_FALSE = "false"
+ACK_OUTSTANDING = "outstanding"
+ACK_STATUSES = {ACK_TRUE, ACK_FALSE, ACK_OUTSTANDING}
 
 
 def _normalize_mac(mac: str) -> str:
@@ -66,6 +121,7 @@ class History:
         self.reload()
 
     def reload(self) -> None:
+        _reset_legacy_counters()
         if not self._storage_path.exists():
             self._conversations.clear()
             self._order.clear()
@@ -105,7 +161,7 @@ class History:
         conversation = self._conversations.get(mac)
         if conversation is None:
             raise KeyError(f"No conversation found for MAC {mac}.")
-        return Conversation(mac=conversation.mac, sent_messages=list(conversation.sent_messages), received_messages=list(conversation.received_messages))
+        return conversation.copy()
 
     def ensure_contact(self, mac: str) -> Conversation:
         mac = _normalize_mac(mac)
@@ -122,15 +178,40 @@ class History:
             if persist:
                 self.save()
 
-    def record_sent_message(self, mac: str, message: str, persist: bool = True) -> None:
-        self._append_message(mac, message, direction="sent")
+    def record_sent_message(
+        self, mac: str, message: str, *, timestamp: datetime | None = None, ack_status: Optional[str] = None, persist: bool = True
+    ) -> "MessageRecord":
+        record = self._append_message(mac, message, direction="sent", timestamp=timestamp, ack_status=ack_status or ACK_OUTSTANDING)
         if persist:
             self.save()
+        return record
 
-    def record_received_message(self, mac: str, message: str, persist: bool = True) -> None:
-        self._append_message(mac, message, direction="received")
+    def record_received_message(self, mac: str, message: str, *, timestamp: datetime | None = None, persist: bool = True) -> "MessageRecord":
+        record = self._append_message(mac, message, direction="received", timestamp=timestamp)
         if persist:
             self.save()
+        return record
+
+    def set_ack_status(self, mac: str, timestamp: Union[datetime, str], status: Union[str, bool], *, persist: bool = True) -> bool:
+        mac = _normalize_mac(mac)
+        normalized_status = _normalize_ack_status(status)
+        record = self._find_sent_record(mac, timestamp)
+        if record is None or record.ack_status == normalized_status:
+            return False
+        record.ack_status = normalized_status
+        if persist:
+            self.save()
+        return True
+
+    def fail_pending_ack(self, mac: str, timestamp: Union[datetime, str], *, persist: bool = True) -> bool:
+        mac = _normalize_mac(mac)
+        record = self._find_sent_record(mac, timestamp)
+        if record is None or record.ack_status == ACK_TRUE or record.ack_status == ACK_FALSE:
+            return False
+        record.ack_status = ACK_FALSE
+        if persist:
+            self.save()
+        return True
 
     def clear(self, persist: bool = True) -> None:
         self._conversations.clear()
@@ -138,14 +219,92 @@ class History:
         if persist:
             self.save()
 
-    def _append_message(self, mac: str, message: str, direction: str) -> None:
+    def _append_message(self, mac: str, message: str, direction: str, timestamp: datetime | None = None, ack_status: Optional[str] = None) -> MessageRecord:
         if not isinstance(message, str):
             raise TypeError("Messages must be strings.")
         mac = _normalize_mac(mac)
         conversation = self.ensure_contact(mac)
+        ts = timestamp or _now_utc()
+        ack = _normalize_ack_status(ack_status) if ack_status is not None else (ACK_OUTSTANDING if direction == "sent" else None)
+        record = MessageRecord(timestamp=ts, message=message, ack_status=ack)
         if direction == "sent":
-            conversation.sent_messages.append(message)
+            conversation.sent_messages.append(record)
         elif direction == "received":
-            conversation.received_messages.append(message)
+            conversation.received_messages.append(record)
         else:
             raise ValueError("Unsupported direction provided to _append_message.")
+        return record
+
+    def _find_sent_record(self, mac: str, timestamp: Union[datetime, str]) -> Optional[MessageRecord]:
+        conversation = self._conversations.get(mac)
+        if not conversation:
+            return None
+        target_ts = _coerce_timestamp(timestamp)
+        for record in conversation.sent_messages:
+            if record.timestamp == target_ts:
+                return record
+        return None
+
+
+_LEGACY_COUNTERS: Dict[str, int] = {"SentMessages": 0, "ReceivedMessages": 0}
+
+
+def _legacy_timestamp(origin: str) -> datetime:
+    # Provides deterministic ordering for legacy entries without timestamps.
+    count = _LEGACY_COUNTERS.setdefault(origin, 0)
+    _LEGACY_COUNTERS[origin] = count + 1
+    return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(milliseconds=count)
+
+
+def _reset_legacy_counters() -> None:
+    for key in _LEGACY_COUNTERS:
+        _LEGACY_COUNTERS[key] = 0
+
+
+def _parse_timestamp(value: str) -> datetime:
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError(f"Invalid ISO 8601 timestamp: {value}") from exc
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _format_timestamp(dt: datetime) -> str:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _normalize_ack_status(value: Union[str, bool, None]) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        normalized = ACK_TRUE if value else ACK_FALSE
+    else:
+        normalized = str(value).strip().lower()
+        if normalized == "pending":
+            normalized = ACK_OUTSTANDING
+    if normalized not in ACK_STATUSES:
+        raise ValueError(f"Invalid acknowledgement status: {value}")
+    return normalized
+
+
+def _coerce_timestamp(value: Union[datetime, str]) -> datetime:
+    if isinstance(value, datetime):
+        ts = value
+    elif isinstance(value, str):
+        ts = _parse_timestamp(value)
+    else:
+        raise TypeError("Timestamp must be datetime or ISO string.")
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts.astimezone(timezone.utc)

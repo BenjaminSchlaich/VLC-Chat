@@ -14,6 +14,7 @@ class VLCInterface:
         self._message_callbacks: List[Callable[[str, str, Optional[dict]], None]] = []
         self._stats_callbacks: List[Callable[[dict], None]] = []
         self._started = False
+        self._ack_callbacks: List[Callable[[str, str], None]] = []
 
     def start(self) -> None:
         if self._started:
@@ -33,6 +34,9 @@ class VLCInterface:
     def register_statistics_callback(self, callback: Callable[[dict], None]) -> None:
         self._stats_callbacks.append(callback)
 
+    def register_ack_callback(self, callback: Callable[[str, str], None]) -> None:
+        self._ack_callbacks.append(callback)
+
     def send_message(self, *, dest_mac: str, message: str) -> None:
         if not self._started:
             raise RuntimeError("VLC interface not started.")
@@ -49,3 +53,7 @@ class VLCInterface:
         if stats:
             for cb in self._stats_callbacks:
                 cb(stats)
+
+    def simulate_ack(self, mac: str, timestamp: str) -> None:
+        for callback in self._ack_callbacks:
+            callback(mac, timestamp)

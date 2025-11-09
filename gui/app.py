@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox
 from typing import Optional
 
 from history import Conversation, History
@@ -42,6 +42,7 @@ class ChatApp:
 
         self.vlc_interface.register_message_callback(self._on_message_from_interface)
         self.vlc_interface.register_statistics_callback(self._on_stats_from_interface)
+        self.vlc_interface.register_ack_callback(self._on_ack_from_interface)
 
     def run(self) -> None:
         self.root.mainloop()
@@ -62,8 +63,9 @@ class ChatApp:
         if not mac:
             messagebox.showinfo("Select Contact", "Please select a contact before sending messages.")
             return
-        self.history.record_sent_message(mac, message)
-        self.chat_view.append_message(mac, "sent", message)
+        record = self.history.record_sent_message(mac, message)
+        self.chat_view.append_message(mac, "sent", record)
+        self._schedule_ack_timeout(mac, record.timestamp)
         self.vlc_interface.send_message(dest_mac=mac, message=message)
         self._logger.info("TX -> %s: %s", mac, message)
 
@@ -72,15 +74,37 @@ class ChatApp:
             self._logger.info("RX <- %s: %s", mac, message)
             if stats:
                 self._logger.info("RX stats: %s", stats)
-            self.history.record_received_message(mac, message)
+            record = self.history.record_received_message(mac, message)
             self.refresh_contacts()
-            self.chat_view.append_message(mac, "received", message)
+            self.chat_view.append_message(mac, "received", record)
 
         # Ensure UI updates happen on the Tk event loop.
         self.root.after(0, _process)
 
     def _on_stats_from_interface(self, stats: dict) -> None:
         self._logger.info("STAT %s", stats)
+
+    def _on_ack_from_interface(self, mac: str, timestamp: str) -> None:
+        def _process() -> None:
+            updated = self.history.set_ack_status(mac, timestamp, "true")
+            if updated:
+                self._logger.info("ACK confirmed for %s @ %s", mac, timestamp)
+                self._refresh_chat_if_current(mac)
+
+        self.root.after(0, _process)
+
+    def _schedule_ack_timeout(self, mac: str, timestamp) -> None:
+        def _timeout() -> None:
+            if self.history.fail_pending_ack(mac, timestamp):
+                self._logger.warning("ACK timeout for %s @ %s", mac, timestamp)
+                self._refresh_chat_if_current(mac)
+
+        self.root.after(5000, _timeout)
+
+    def _refresh_chat_if_current(self, mac: str) -> None:
+        if self.current_mac == mac:
+            conversation = self._safe_get_conversation(mac)
+            self.chat_view.show_conversation(mac, conversation)
 
     def _safe_get_conversation(self, mac: str) -> Optional[Conversation]:
         try:

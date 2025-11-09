@@ -4,23 +4,19 @@
         "SentMessages": [
             {
                 "timestamp": "2025-11-08T14:36:20Z",
-                "message": "Hi Anne, nice that you're here!",
-                "ack": "true"
+                "message": "Hi Anne, nice that you're here!"
             },
             {
                 "timestamp": "2025-11-08T14:39:38Z",
-                "message": "I'm doing just fine, how was your day?",
-                "ack": "true"
+                "message": "I'm doing just fine, how was your day?"
             },
             {
                 "timestamp": "2025-11-08T14:39:51Z",
-                "message": "Btw, we're having pizza tonight...",
-                "ack": "true"
+                "message": "Btw, we're having pizza tonight..."
             },
             {
                 "timestamp": "2025-11-08T14:41:13Z",
-                "message": "Glad to hear that, see you later then:)",
-                "ack": "outstanding"
+                "message": "Glad to hear that, see you later then:)"
             }
         ],
         "ReceivedMessages": [
@@ -39,13 +35,11 @@
         "SentMessages": [
             {
                 "timestamp": "2025-11-08T14:32:05Z",
-                "message": "Hello, everyone! This is Charles.",
-                "ack": "false"
+                "message": "Hello, everyone! This is Charles."
             },
             {
                 "timestamp": "2025-11-08T14:33:09Z",
-                "message": "Is Anne here?",
-                "ack": "false"
+                "message": "Is Anne here?"
             }
         ],
         "ReceivedMessages": [

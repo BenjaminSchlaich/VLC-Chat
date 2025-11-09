@@ -5,7 +5,7 @@ from tkinter import messagebox, ttk
 from typing import Callable, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from history import Conversation
+    from history import Conversation, MessageRecord
 
 
 MAX_MESSAGE_LENGTH = 200
@@ -24,9 +24,10 @@ class ChatView(ttk.Frame):
 
         self._text = tk.Text(self, wrap="word", state="disabled", height=25)
         self._text.pack(fill="both", expand=True, pady=(8, 8))
-        self._text.tag_configure("sent", justify="right", foreground="#0a84ff")
-        self._text.tag_configure("received", justify="left", foreground="#111111")
-        self._text.tag_configure("meta", font=("TkDefaultFont", 9, "italic"))
+        self._text.tag_configure("sent_true", justify="right", foreground="#2ecc71")
+        self._text.tag_configure("sent_outstanding", justify="right", foreground="#0a84ff")
+        self._text.tag_configure("sent_false", justify="right", foreground="#ff3b30")
+        self._text.tag_configure("received", justify="left", foreground="#ffffff")
 
         input_frame = ttk.Frame(self)
         input_frame.pack(fill="x")
@@ -48,17 +49,17 @@ class ChatView(ttk.Frame):
         self._text.delete("1.0", tk.END)
 
         if conversation:
-            for direction, message in conversation.iter_events():
-                self._insert_message(direction, message)
+            for direction, record in conversation.iter_events():
+                self._insert_record(direction, record)
 
         self._text.configure(state="disabled")
         self._text.see(tk.END)
 
-    def append_message(self, mac: str, direction: str, message: str) -> None:
+    def append_message(self, mac: str, direction: str, record: "MessageRecord") -> None:
         if mac != self._active_mac:
             return
         self._text.configure(state="normal")
-        self._insert_message(direction, message)
+        self._insert_record(direction, record)
         self._text.configure(state="disabled")
         self._text.see(tk.END)
 
@@ -68,10 +69,16 @@ class ChatView(ttk.Frame):
     def focus_input(self) -> None:
         self._entry.focus_set()
 
-    def _insert_message(self, tag: str, message: str) -> None:
-        if not message:
+    def _insert_record(self, direction: str, record: "MessageRecord") -> None:
+        if not record.message:
             return
-        self._text.insert(tk.END, f"{message}\n", (tag,))
+        if direction == "received":
+            tag = "received"
+        else:
+            status = (record.ack_status or "outstanding").lower()
+            tag = f"sent_{status}" if status in {"true", "outstanding", "false"} else "sent_outstanding"
+        stamp = record.timestamp.astimezone().strftime("%H:%M:%S")
+        self._text.insert(tk.END, f"[{stamp}] {record.message}\n", (tag,))
 
     def _handle_send_event(self, event: tk.Event) -> None:  # type: ignore[override]
         self._handle_send()
