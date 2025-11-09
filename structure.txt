@@ -1,0 +1,13 @@
+vlc_chat/
+│
+├── main.py                 # Entry point — starts the app
+├── history.py              # history class contains contacts and their messages, loads from/to JSON
+├── vlc_interface.py        # Handles send/receive I/O via pySerial
+│
+├── gui/
+│   ├── __init__.py
+│   ├── app.py              # Tkinter main window setup
+│   ├── chat_view.py        # Chat window (message bubbles, input field)
+│   └── contacts_panel.py   # List of contacts (MACs)
+│
+└── requirements.txt

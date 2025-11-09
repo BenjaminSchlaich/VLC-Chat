@@ -1,0 +1,29 @@
+
+[
+    {
+        "MAC": "AB",
+        "SentMessages":
+        [
+            "Hi Anne, nice that you're here!",
+            "I'm doing just fine, how was your day?",
+            "Glad to hear that, see you later then:)"
+        ],
+        "ReceivedMessages":
+        [
+            "Hey Charles, how u doing?",
+            "Amazing! Let me tell you all about it later over dinner..."
+        ]
+    },
+    {
+        "MAC": "FF",
+        "SentMessages":
+        [
+            "Hello, everyone! This is Charles.",
+            "Is Anne here?"
+        ],
+        "ReceivedMessages":
+        [
+            "This is Anne."
+        ]
+    }
+]
