@@ -66,7 +66,7 @@ class ChatApp:
         record = self.history.record_sent_message(mac, message)
         self.chat_view.append_message(mac, "sent", record)
         self._schedule_ack_timeout(mac, record.timestamp)
-        self.vlc_interface.send_message(dest_mac=mac, message=message)
+        self.vlc_interface.send_message(dest_mac=mac, message=message, timestamp=record.timestamp)
         self._logger.info("TX -> %s: %s", mac, message)
 
     def _on_message_from_interface(self, mac: str, message: str, stats: Optional[dict] = None) -> None:
