@@ -39,7 +39,8 @@ def main() -> None:
     config = load_config()
     history = History()
     vlc_interface = VLCInterface(config=config)
-    app = ChatApp(history=history, vlc_interface=vlc_interface, local_mac=config["MAC"])
+    recv_color = config.get("RECV_COLOR", "black")
+    app = ChatApp(history=history, vlc_interface=vlc_interface, local_mac=config["MAC"], recv_color=recv_color)
 
     try:
         vlc_interface.start()

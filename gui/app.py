@@ -14,7 +14,7 @@ from vlc_interface import VLCInterface
 class ChatApp:
     """Tkinter-based GUI that connects the history with the VLC interface."""
 
-    def __init__(self, *, history: History, vlc_interface: VLCInterface, local_mac: str) -> None:
+    def __init__(self, *, history: History, vlc_interface: VLCInterface, local_mac: str, recv_color: str = "black") -> None:
         self.history = history
         self.vlc_interface = vlc_interface
         self.local_mac = local_mac
@@ -33,7 +33,7 @@ class ChatApp:
         self.contacts_panel = ContactsPanel(self.root, on_select=self._handle_contact_selection)
         self.contacts_panel.grid(row=0, column=0, sticky="nsew")
 
-        self.chat_view = ChatView(self.root, on_send=self._handle_send_message)
+        self.chat_view = ChatView(self.root, on_send=self._handle_send_message, recv_color=recv_color)
         self.chat_view.grid(row=0, column=1, sticky="nsew")
 
         self.current_mac: Optional[str] = None

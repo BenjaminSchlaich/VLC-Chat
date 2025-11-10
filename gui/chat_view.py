@@ -14,7 +14,8 @@ MAX_MESSAGE_LENGTH = 200
 class ChatView(ttk.Frame):
     """Displays the messages of the currently selected conversation."""
 
-    def __init__(self, master: tk.Widget, *, on_send: Callable[[str], None]) -> None:
+    def __init__(self, master: tk.Widget, *, on_send: Callable[[str], None], recv_color: str = "#ffffff") -> None:
+        """recv_color: Tk color string used for incoming message text (e.g. "black" or "#ffffff")."""
         super().__init__(master, padding=12)
         self._on_send = on_send
         self._active_mac: Optional[str] = None
@@ -27,7 +28,8 @@ class ChatView(ttk.Frame):
         self._text.tag_configure("sent_true", justify="right", foreground="#2ecc71")
         self._text.tag_configure("sent_outstanding", justify="right", foreground="#0a84ff")
         self._text.tag_configure("sent_false", justify="right", foreground="#ff3b30")
-        self._text.tag_configure("received", justify="left", foreground="#ffffff")
+        # Configure the received tag using the supplied color.
+        self._text.tag_configure("received", justify="left", foreground=recv_color)
 
         input_frame = ttk.Frame(self)
         input_frame.pack(fill="x")
