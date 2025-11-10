@@ -22,7 +22,7 @@ def load_config(path: str | Path = CONFIG_PATH) -> Dict[str, Any]:
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid JSON in configuration file: {path}") from exc
 
-    required_fields = ("MAC", "FEC_THRESHOLD", "CHANNEL_BUSY_THRESHOLD", "N_RETRANSMISSIONS")
+    required_fields = ["MAC"]
     for field in required_fields:
         if field not in config:
             raise KeyError(f"Configuration missing required field '{field}'.")

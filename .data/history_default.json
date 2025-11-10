@@ -1,22 +1,16 @@
 [
     {
-        "MAC": "AB",
+        "MAC": "CD",
         "SentMessages": [
             {
                 "timestamp": "2025-11-08T14:36:20Z",
-                "message": "Hi Anne, nice that you're here!"
+                "message": "Hi Anne, nice that you're here!",
+                "ack": "true"
             },
             {
                 "timestamp": "2025-11-08T14:39:38Z",
-                "message": "I'm doing just fine, how was your day?"
-            },
-            {
-                "timestamp": "2025-11-08T14:39:51Z",
-                "message": "Btw, we're having pizza tonight..."
-            },
-            {
-                "timestamp": "2025-11-08T14:41:13Z",
-                "message": "Glad to hear that, see you later then:)"
+                "message": "I'm doing just fine, how was your day?",
+                "ack": "true"
             }
         ],
         "ReceivedMessages": [
@@ -35,11 +29,13 @@
         "SentMessages": [
             {
                 "timestamp": "2025-11-08T14:32:05Z",
-                "message": "Hello, everyone! This is Charles."
+                "message": "Hello, everyone! This is Charles.",
+                "ack": "false"
             },
             {
                 "timestamp": "2025-11-08T14:33:09Z",
-                "message": "Is Anne here?"
+                "message": "Is Anne here?",
+                "ack": "false"
             }
         ],
         "ReceivedMessages": [

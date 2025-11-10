@@ -7,23 +7,16 @@ import time
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from typing import Callable, Deque, Dict, List, Optional
-
-try:
-    import serial
-    from serial import Serial, SerialException
-except ImportError as exc:  # pragma: no cover - handled at runtime
-    serial = None
-    Serial = None
-    SerialException = Exception  # type: ignore[assignment]
+import serial
 
 
 class VLCInterface:
     """Handles the serial protocol for ETH's VLC boards."""
 
     BAUD_RATE = 115200
-    READ_TIMEOUT = 0.2  # seconds
-    STARTUP_DELAY = 2.0  # seconds
-    COMMAND_PAUSE = 0.1
+    READ_TIMEOUT = 0.2      # seconds after reading from serial
+    STARTUP_DELAY = 2.0     # seconds after writing the config params
+    COMMAND_PAUSE = 0.1     # seconds after commands
     MAX_PAYLOAD = 200
 
     def __init__(self, *, config: Dict[str, int | str], port: Optional[str] = None) -> None:
@@ -120,18 +113,6 @@ class VLCInterface:
 
         self._logger.info("Queued TX -> %s (%s chars)", dest, len(message))
 
-    # ------------------------------------------------------------------ Diagnostics helpers
-    def simulate_incoming_message(self, mac: str, message: str, stats: Optional[dict] = None) -> None:
-        for callback in self._message_callbacks:
-            callback(mac, message, stats)
-        if stats:
-            for cb in self._stats_callbacks:
-                cb(stats)
-
-    def simulate_ack(self, mac: str, timestamp: str) -> None:
-        for callback in self._ack_callbacks:
-            callback(mac, timestamp)
-
     # ------------------------------------------------------------------ Internal helpers
     def _determine_port(self) -> str:
         if self.port:
@@ -139,9 +120,6 @@ class VLCInterface:
         cfg_port = self.config.get("SERIAL_PORT")
         if isinstance(cfg_port, str) and cfg_port.strip():
             return cfg_port.strip()
-        env_port = os.getenv("VLC_SERIAL_PORT")
-        if env_port:
-            return env_port.strip()
         raise ValueError(
             "Serial port not specified. Provide it when instantiating VLCInterface, "
             "set config['SERIAL_PORT'], or define the VLC_SERIAL_PORT environment variable."
