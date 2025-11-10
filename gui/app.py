@@ -76,8 +76,8 @@ class ChatApp:
             if stats:
                 self._logger.info("RX stats: %s", stats)
             seq = stats.get("seq") if stats else None
-            normalized_seq = self.history.normalize_seq(stats.get("seq")) if stats else None
-            record = self.history.record_received_message(mac, message, seq=normalized_seq)
+            seq = stats.get("seq") if stats else None
+            record = self.history.record_received_message(mac, message, seq=seq)
             self.refresh_contacts()
             self.chat_view.append_message(mac, "received", record)
 
@@ -89,20 +89,18 @@ class ChatApp:
 
     def _on_ack_from_interface(self, mac: str, seq: int) -> None:
         def _process() -> None:
-            normalized_seq = self.history.normalize_seq(seq)
-            updated = self.history.set_ack_status_by_seq(normalized_seq, "true") if normalized_seq is not None else False
+            updated = self.history.set_ack_status_by_seq(mac, seq, "true")
             if updated:
-                self._logger.info("ACK confirmed for %s seq=%s", mac, normalized_seq)
+                self._logger.info("ACK confirmed for %s seq=%s", mac, seq)
                 self._refresh_chat_if_current(mac)
 
         self.root.after(0, _process)
 
     def _on_sequence_assigned(self, mac: str, seq: int, timestamp) -> None:
         def _process() -> None:
-            normalized_seq = self.history.normalize_seq(seq)
-            changed = self.history.set_sequence_for_message(mac, timestamp, normalized_seq) if normalized_seq is not None else False
+            changed = self.history.set_sequence_for_message(mac, timestamp, seq)
             if changed:
-                self._logger.info("Sequence %s assigned to %s", normalized_seq, mac)
+                self._logger.info("Sequence %s assigned to %s", seq, mac)
 
         self.root.after(0, _process)
 
