@@ -16,7 +16,7 @@ class Conversation:
     sent_messages: List["MessageRecord"] = field(default_factory=list)
     received_messages: List["MessageRecord"] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Sequence[str]]:
+    def to_dict(self) -> Dict[str, Union[str, Sequence[Dict[str, str]]]]:
         return {
             "MAC": self.mac,
             "SentMessages": [record.to_dict(include_ack=True) for record in self.sent_messages],

@@ -8,6 +8,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timezone
 from typing import Callable, Deque, Dict, List, Optional
 import serial
+from serial import Serial, SerialException
 
 
 class VLCInterface:
@@ -241,7 +242,7 @@ class VLCInterface:
 
         if stats.get("mode") == "R" and self._pending_rx:
             pending = self._pending_rx.popleft()
-            src = stats.get("src") or stats.get("dest") or ""
+            src = str(stats.get("src") or stats.get("dest") or "")
             for callback in self._message_callbacks:
                 callback(src, pending["message"], stats)
 
