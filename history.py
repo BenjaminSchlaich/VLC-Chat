@@ -123,14 +123,17 @@ class History:
         self._conversations: Dict[str, Conversation] = {}
         self._order: List[str] = []
         self._seq_index: Dict[int, Tuple[str, MessageRecord]] = {}
+        self._seq_offset: int = 0
         self._storage_path.parent.mkdir(parents=True, exist_ok=True)
         self.reload()
 
     def reload(self) -> None:
         _reset_legacy_counters()
+        self._seq_offset = 0
         if not self._storage_path.exists():
             self._conversations.clear()
             self._order.clear()
+            self._seq_index.clear()
             return
 
         try:
@@ -152,6 +155,7 @@ class History:
             self._conversations[conversation.mac] = conversation
             self._order.append(conversation.mac)
             self._register_conversation_sequences(conversation)
+        self._seq_offset = max(self._seq_index.keys(), default=0)
 
     def save(self) -> None:
         conversations = [self._conversations[mac].to_dict() for mac in self._order]
@@ -163,6 +167,15 @@ class History:
 
     def list_contacts(self) -> List[str]:
         return list(self._order)
+
+    @property
+    def seq_offset(self) -> int:
+        return self._seq_offset
+
+    def normalize_seq(self, raw_seq: Optional[int]) -> Optional[int]:
+        if raw_seq is None:
+            return None
+        return raw_seq + self._seq_offset + 1
 
     def get_conversation(self, mac: str) -> Conversation:
         mac = _normalize_mac(mac)
