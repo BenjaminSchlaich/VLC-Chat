@@ -76,9 +76,11 @@ class ChatApp:
             if stats:
                 self._logger.info("RX stats: %s", stats)
             seq = stats.get("seq") if stats else None
-            record = self.history.record_received_message(mac, message, seq=seq)
+            dest = stats.get("dest") if stats else None
+            target_mac = "FF" if dest == "FF" else mac
+            record = self.history.record_received_message(target_mac, message, seq=seq)
             self.refresh_contacts()
-            self.chat_view.append_message(mac, "received", record)
+            self.chat_view.append_message(target_mac, "received", record)
 
         # Ensure UI updates happen on the Tk event loop.
         self.root.after(0, _process)
