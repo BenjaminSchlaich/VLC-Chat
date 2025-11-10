@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence, Union, Optional, Tuple
+from typing import Dict, Iterable, List, Sequence, Union, Optional
 
 
 @dataclass
@@ -122,14 +122,12 @@ class History:
         self._storage_path = Path(storage_path)
         self._conversations: Dict[str, Conversation] = {}
         self._order: List[str] = []
-        self._seq_index: Dict[int, Tuple[str, MessageRecord]] = {}
-        self._seq_offset: int = 0
+        self._seq_index: Dict[tuple[str, int], MessageRecord] = {}
         self._storage_path.parent.mkdir(parents=True, exist_ok=True)
         self.reload()
 
     def reload(self) -> None:
         _reset_legacy_counters()
-        self._seq_offset = 0
         if not self._storage_path.exists():
             self._conversations.clear()
             self._order.clear()
@@ -155,7 +153,6 @@ class History:
             self._conversations[conversation.mac] = conversation
             self._order.append(conversation.mac)
             self._register_conversation_sequences(conversation)
-        self._seq_offset = max(self._seq_index.keys(), default=0)
 
     def save(self) -> None:
         conversations = [self._conversations[mac].to_dict() for mac in self._order]
@@ -167,15 +164,6 @@ class History:
 
     def list_contacts(self) -> List[str]:
         return list(self._order)
-
-    @property
-    def seq_offset(self) -> int:
-        return self._seq_offset
-
-    def normalize_seq(self, raw_seq: Optional[int]) -> Optional[int]:
-        if raw_seq is None:
-            return None
-        return raw_seq + self._seq_offset + 1
 
     def get_conversation(self, mac: str) -> Conversation:
         mac = _normalize_mac(mac)
@@ -253,12 +241,12 @@ class History:
             self.save()
         return True
 
-    def set_ack_status_by_seq(self, seq: int, status: Union[str, bool], *, persist: bool = True) -> bool:
-        entry = self._seq_index.get(seq)
-        if not entry:
+    def set_ack_status_by_seq(self, mac: str, seq: int, status: Union[str, bool], *, persist: bool = True) -> bool:
+        mac = _normalize_mac(mac)
+        record = self._seq_index.get((mac, seq))
+        if not record:
             return False
         normalized = _normalize_ack_status(status)
-        record = entry[1]
         if record.ack_status == normalized:
             return False
         record.ack_status = normalized
@@ -338,14 +326,18 @@ class History:
     def _index_sequence(self, mac: str, record: MessageRecord) -> None:
         if record.seq is None:
             return
-        existing = self._seq_index.get(record.seq)
-        if existing and existing[1] is not record:
+        key = (_normalize_mac(mac), record.seq)
+        existing = self._seq_index.get(key)
+        if existing and existing is not record:
             raise ValueError(f"Duplicate sequence number {record.seq} detected for {mac}.")
-        self._seq_index[record.seq] = (mac, record)
+        self._seq_index[key] = record
 
     def _remove_sequence(self, record: MessageRecord) -> None:
         if record.seq is not None:
-            self._seq_index.pop(record.seq, None)
+            for key, value in list(self._seq_index.items()):
+                if value is record:
+                    self._seq_index.pop(key, None)
+                    break
 
     def _rebuild_seq_index(self) -> None:
         self._seq_index.clear()
