@@ -12,13 +12,19 @@ class HistoryTests(unittest.TestCase):
         sample = [
             {
                 "MAC": "ab",
-                "SentMessages": [{"timestamp": "2025-11-08T14:36:20Z", "message": "hello", "ack": "true"}],
-                "ReceivedMessages": [{"timestamp": "2025-11-08T14:37:20Z", "message": "hi"}],
+                "SentMessages": [
+                    {"timestamp": "2025-11-08T14:36:20Z", "message": "hello", "ack": "true", "seq": 1}
+                ],
+                "ReceivedMessages": [
+                    {"timestamp": "2025-11-08T14:37:20Z", "message": "hi", "seq": 2}
+                ],
             },
             {
                 "MAC": "ff",
-                "SentMessages": [{"timestamp": "2025-11-08T14:32:05Z", "message": "Hello, world!", "ack": "false"}],
-                "ReceivedMessages": [{"timestamp": "2025-11-08T14:38:20Z", "message": "broadcast"}],
+                "SentMessages": [
+                    {"timestamp": "2025-11-08T14:32:05Z", "message": "Hello, world!", "ack": "false", "seq": 3}
+                ],
+                "ReceivedMessages": [{"timestamp": "2025-11-08T14:38:20Z", "message": "broadcast", "seq": 4}],
             },
         ]
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -32,8 +38,10 @@ class HistoryTests(unittest.TestCase):
             self.assertEqual("AB", convo.mac)
             self.assertEqual("hello", convo.sent_messages[0].message)
             self.assertEqual(ACK_TRUE, convo.sent_messages[0].ack_status)
+            self.assertEqual(1, convo.sent_messages[0].seq)
             self.assertEqual("hi", convo.received_messages[0].message)
             self.assertIsNone(convo.received_messages[0].ack_status)
+            self.assertEqual(2, convo.received_messages[0].seq)
 
     def test_history_records_and_persists(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -43,14 +51,18 @@ class HistoryTests(unittest.TestCase):
             timestamp = datetime(2025, 1, 1, tzinfo=timezone.utc)
             record = history.record_sent_message("aa", "Hello there", timestamp=timestamp)
             self.assertEqual(ACK_OUTSTANDING, record.ack_status)
-            history.record_received_message("aa", "General Kenobi", timestamp=timestamp)
+            history.record_received_message("aa", "General Kenobi", timestamp=timestamp, seq=11)
 
-            history.set_ack_status("aa", timestamp, "true")
+            assigned = history.set_sequence_for_message("aa", timestamp, 10)
+            self.assertTrue(assigned)
+            updated = history.set_ack_status_by_seq(10, "true")
+            self.assertTrue(updated)
 
             data = json.loads(history_path.read_text(encoding="utf-8"))
             self.assertEqual("AA", data[0]["MAC"])
             self.assertEqual("Hello there", data[0]["SentMessages"][0]["message"])
             self.assertEqual("true", data[0]["SentMessages"][0]["ack"])
+            self.assertEqual(10, data[0]["SentMessages"][0]["seq"])
             self.assertEqual("General Kenobi", data[0]["ReceivedMessages"][0]["message"])
             self.assertEqual("2025-01-01T00:00:00Z", data[0]["SentMessages"][0]["timestamp"])
 

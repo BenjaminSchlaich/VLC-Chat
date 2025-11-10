@@ -43,6 +43,7 @@ class ChatApp:
         self.vlc_interface.register_message_callback(self._on_message_from_interface)
         self.vlc_interface.register_statistics_callback(self._on_stats_from_interface)
         self.vlc_interface.register_ack_callback(self._on_ack_from_interface)
+        self.vlc_interface.register_sequence_callback(self._on_sequence_assigned)
 
     def run(self) -> None:
         self.root.mainloop()
@@ -74,7 +75,8 @@ class ChatApp:
             self._logger.info("RX <- %s: %s", mac, message)
             if stats:
                 self._logger.info("RX stats: %s", stats)
-            record = self.history.record_received_message(mac, message)
+            seq = stats.get("seq") if stats else None
+            record = self.history.record_received_message(mac, message, seq=seq)
             self.refresh_contacts()
             self.chat_view.append_message(mac, "received", record)
 
@@ -84,12 +86,20 @@ class ChatApp:
     def _on_stats_from_interface(self, stats: dict) -> None:
         self._logger.info("STAT %s", stats)
 
-    def _on_ack_from_interface(self, mac: str, timestamp: str) -> None:
+    def _on_ack_from_interface(self, mac: str, seq: int) -> None:
         def _process() -> None:
-            updated = self.history.set_ack_status(mac, timestamp, "true")
+            updated = self.history.set_ack_status_by_seq(seq, "true")
             if updated:
-                self._logger.info("ACK confirmed for %s @ %s", mac, timestamp)
+                self._logger.info("ACK confirmed for %s seq=%s", mac, seq)
                 self._refresh_chat_if_current(mac)
+
+        self.root.after(0, _process)
+
+    def _on_sequence_assigned(self, mac: str, seq: int, timestamp) -> None:
+        def _process() -> None:
+            changed = self.history.set_sequence_for_message(mac, timestamp, seq)
+            if changed:
+                self._logger.info("Sequence %s assigned to %s", seq, mac)
 
         self.root.after(0, _process)
 

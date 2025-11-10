@@ -3,39 +3,52 @@
         "MAC": "CD",
         "SentMessages": [
             {
-                "timestamp": "2025-11-10T12:36:43.824647Z",
-                "message": "hello",
-                "ack": "true"
+                "timestamp": "2025-11-08T14:36:20Z",
+                "message": "Hi Anne, nice that you're here!",
+                "ack": "true",
+                "seq": 1
             },
             {
-                "timestamp": "2025-11-10T12:46:47.577464Z",
-                "message": "test",
-                "ack": "true"
+                "timestamp": "2025-11-08T14:39:38Z",
+                "message": "I'm doing just fine, how was your day?",
+                "ack": "true",
+                "seq": 3
             },
             {
-                "timestamp": "2025-11-10T12:46:53.259593Z",
-                "message": "test 2",
-                "ack": "true"
+                "timestamp": "2025-11-10T13:12:30.744308Z",
+                "message": "ellooo",
+                "ack": "true",
+                "seq": 0
             },
             {
-                "timestamp": "2025-11-10T12:47:57.766833Z",
-                "message": "with ack",
-                "ack": "true"
+                "timestamp": "2025-11-10T13:12:37.900634Z",
+                "message": "no ack?",
+                "ack": "false",
+                "seq": 1
             },
             {
-                "timestamp": "2025-11-10T12:48:19.213566Z",
-                "message": "aschau",
-                "ack": "false"
+                "timestamp": "2025-11-10T13:12:45.579271Z",
+                "message": "ack this",
+                "ack": "false",
+                "seq": 2
+            },
+            {
+                "timestamp": "2025-11-10T13:12:55.419114Z",
+                "message": "ack now",
+                "ack": "false",
+                "seq": 3
             }
         ],
         "ReceivedMessages": [
             {
                 "timestamp": "2025-11-08T14:37:41Z",
-                "message": "Hey Charles, how u doing?"
+                "message": "Hey Charles, how u doing?",
+                "seq": 2
             },
             {
                 "timestamp": "2025-11-08T14:40:51Z",
-                "message": "Amazing! Let me tell you all about it later over dinner..."
+                "message": "Amazing! Let me tell you all about it later over dinner...",
+                "seq": 4
             }
         ]
     },
@@ -45,27 +58,26 @@
             {
                 "timestamp": "2025-11-02T14:36:20Z",
                 "message": "message 1",
-                "ack": "true"
+                "ack": "true",
+                "seq": 5
             },
             {
                 "timestamp": "2025-11-03T14:39:38Z",
                 "message": "message 23?",
-                "ack": "true"
-            },
-            {
-                "timestamp": "2025-11-10T12:36:50.010548Z",
-                "message": "hello",
-                "ack": "false"
+                "ack": "true",
+                "seq": 6
             }
         ],
         "ReceivedMessages": [
             {
                 "timestamp": "2025-11-03T14:37:41Z",
-                "message": "message"
+                "message": "message",
+                "seq": 7
             },
             {
                 "timestamp": "2025-11-08T14:40:51Z",
-                "message": "more message."
+                "message": "more message.",
+                "seq": 8
             }
         ]
     },
@@ -75,33 +87,21 @@
             {
                 "timestamp": "2025-11-08T14:32:05Z",
                 "message": "Hello, everyone! This is Charles.",
-                "ack": "false"
+                "ack": "false",
+                "seq": 9
             },
             {
                 "timestamp": "2025-11-08T14:33:09Z",
                 "message": "Is Anne here?",
-                "ack": "false"
-            },
-            {
-                "timestamp": "2025-11-10T12:37:21.171585Z",
-                "message": "elllllo",
-                "ack": "true"
-            },
-            {
-                "timestamp": "2025-11-10T12:47:08.197546Z",
-                "message": "no ack ?",
-                "ack": "false"
-            },
-            {
-                "timestamp": "2025-11-10T12:47:15.951874Z",
-                "message": "some ack",
-                "ack": "false"
+                "ack": "false",
+                "seq": 10
             }
         ],
         "ReceivedMessages": [
             {
                 "timestamp": "2025-11-08T14:34:37Z",
-                "message": "This is Anne."
+                "message": "This is Anne.",
+                "seq": 11
             }
         ]
     }

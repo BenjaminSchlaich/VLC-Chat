@@ -4,7 +4,8 @@ import logging
 import os
 import threading
 import time
-from collections import defaultdict, deque
+from collections import deque
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Deque, Dict, List, Optional
 
@@ -14,7 +15,15 @@ try:
 except ImportError:  # pragma: no cover - optional dependency for tests
     serial = None
     Serial = None
-    SerialException = Exception  # type: ignore[assignment]
+SerialException = Exception  # type: ignore[assignment]
+
+
+@dataclass
+class PendingTransmission:
+    dest: str
+    timestamp: datetime
+    timestamp_iso: str
+    seq: Optional[int] = None
 
 
 class VLCInterface:
@@ -39,10 +48,12 @@ class VLCInterface:
 
         self._message_callbacks: List[Callable[[str, str, Optional[dict]], None]] = []
         self._stats_callbacks: List[Callable[[dict], None]] = []
-        self._ack_callbacks: List[Callable[[str, str], None]] = []
+        self._ack_callbacks: List[Callable[[str, int], None]] = []
+        self._sequence_callbacks: List[Callable[[str, int, datetime], None]] = []
 
         self._pending_rx: Deque[dict] = deque()
-        self._pending_acks: Dict[str, Deque[str]] = defaultdict(deque)
+        self._awaiting_seq: Deque[PendingTransmission] = deque()
+        self._pending_by_seq: Dict[int, PendingTransmission] = {}
         self._acks_lock = threading.Lock()
         self._started = False
 
@@ -88,8 +99,11 @@ class VLCInterface:
     def register_statistics_callback(self, callback: Callable[[dict], None]) -> None:
         self._stats_callbacks.append(callback)
 
-    def register_ack_callback(self, callback: Callable[[str, str], None]) -> None:
+    def register_ack_callback(self, callback: Callable[[str, int], None]) -> None:
         self._ack_callbacks.append(callback)
+
+    def register_sequence_callback(self, callback: Callable[[str, int, datetime], None]) -> None:
+        self._sequence_callbacks.append(callback)
 
     # ------------------------------------------------------------------ Sending
     def send_message(self, *, dest_mac: str, message: str, timestamp: datetime) -> None:
@@ -115,10 +129,23 @@ class VLCInterface:
         payload = f"m[{escaped}\0,{dest}]"
         self._send_command(payload)
 
+        entry = PendingTransmission(dest=dest, timestamp=timestamp, timestamp_iso=ts_iso)
         with self._acks_lock:
-            self._pending_acks[dest].append(ts_iso)
+            self._awaiting_seq.append(entry)
 
         self._logger.info("Queued TX -> %s (%s chars)", dest, len(message))
+
+    # Diagnostics helpers --------------------------------------------------
+    def simulate_incoming_message(self, mac: str, message: str, stats: Optional[dict] = None) -> None:
+        for callback in self._message_callbacks:
+            callback(mac, message, stats)
+        if stats:
+            for cb in self._stats_callbacks:
+                cb(stats)
+
+    def simulate_ack(self, mac: str, seq: int) -> None:
+        for callback in self._ack_callbacks:
+            callback(mac, seq)
 
     # ------------------------------------------------------------------ Internal helpers
     def _determine_port(self) -> str:
@@ -225,23 +252,15 @@ class VLCInterface:
             self._logger.debug("Unhandled message event: %s", inner)
 
     def _handle_ack_update(self, mac: str, success: bool) -> None:
-        with self._acks_lock:
-            queue = self._pending_acks.get(mac)
-            if not queue:
-                if success:
-                    self._logger.warning("Dispatch success reported for %s but no pending messages.", mac)
-                    return
-                timestamp_iso = None
-            elif success:
-                self._logger.debug("Frame dispatch confirmed for %s", mac)
-                return
-            else:
-                timestamp_iso = queue.popleft()
-                if not queue:
-                    self._pending_acks.pop(mac, None)
+        if success:
+            self._logger.debug("Frame dispatch confirmed for %s", mac)
+            return
 
-        if timestamp_iso:
-            self._logger.warning("Device reported drop for %s @ %s", mac, timestamp_iso)
+        with self._acks_lock:
+            entry = self._awaiting_seq.popleft() if self._awaiting_seq else None
+
+        if entry:
+            self._logger.warning("Device reported drop for %s @ %s", mac, entry.timestamp_iso)
         else:
             self._logger.warning("Drop reported for %s but no pending messages", mac)
 
@@ -258,10 +277,13 @@ class VLCInterface:
 
         msg_type = stats.get("type") or ""
 
+        if stats.get("mode") == "T" and msg_type == "D":
+            self._attach_sequence(stats)
+
         if stats.get("mode") == "R" and msg_type.startswith("A"):
-            src = stats.get("src")
-            if isinstance(src, str) and src.strip():
-                self._handle_remote_ack(src.strip().upper())
+            seq = stats.get("seq")
+            if isinstance(seq, int):
+                self._handle_remote_ack(seq)
 
         if stats.get("mode") == "R" and msg_type.startswith("D") and self._pending_rx:
             pending = self._pending_rx.popleft()
@@ -274,21 +296,30 @@ class VLCInterface:
         for cb in self._stats_callbacks:
             cb(stats)
 
-    def _handle_remote_ack(self, mac: str) -> None:
-        timestamp_iso: Optional[str] = None
+    def _attach_sequence(self, stats: Dict[str, object]) -> None:
+        seq = stats.get("seq")
+        if not isinstance(seq, int):
+            return
         with self._acks_lock:
-            queue = self._pending_acks.get(mac)
-            if queue:
-                timestamp_iso = queue.popleft()
-                if not queue:
-                    self._pending_acks.pop(mac, None)
+            if not self._awaiting_seq:
+                self._logger.warning("Sequence %s reported but no pending transmissions.", seq)
+                return
+            entry = self._awaiting_seq.popleft()
+            entry.seq = seq
+            self._pending_by_seq[seq] = entry
+        for callback in self._sequence_callbacks:
+            callback(entry.dest, seq, entry.timestamp)
 
-        if not timestamp_iso:
-            self._logger.warning("Received remote ACK from %s but no pending messages.", mac)
+    def _handle_remote_ack(self, seq: int) -> None:
+        with self._acks_lock:
+            entry = self._pending_by_seq.pop(seq, None)
+
+        if not entry:
+            self._logger.warning("Received remote ACK for unknown sequence %s", seq)
             return
 
         for callback in self._ack_callbacks:
-            callback(mac, timestamp_iso)
+            callback(entry.dest, seq)
 
 
 # ---------------------------------------------------------------------- Utility helpers

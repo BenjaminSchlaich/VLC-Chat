@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence, Union, Optional
+from typing import Dict, Iterable, List, Sequence, Union, Optional, Tuple
 
 
 @dataclass
@@ -61,15 +61,18 @@ class MessageRecord:
     timestamp: datetime
     message: str
     ack_status: Optional[str] = None
+    seq: Optional[int] = None
 
     def to_dict(self, *, include_ack: bool) -> Dict[str, str]:
         payload = {"timestamp": _format_timestamp(self.timestamp), "message": self.message}
         if include_ack and self.ack_status is not None:
             payload["ack"] = self.ack_status
+        if self.seq is not None:
+            payload["seq"] = self.seq
         return payload
 
     def copy(self) -> "MessageRecord":
-        return MessageRecord(timestamp=self.timestamp, message=self.message, ack_status=self.ack_status)
+        return MessageRecord(timestamp=self.timestamp, message=self.message, ack_status=self.ack_status, seq=self.seq)
 
     @classmethod
     def from_payload(cls, payload, *, origin: str, is_sent: bool) -> "MessageRecord":
@@ -92,7 +95,9 @@ class MessageRecord:
         timestamp = _parse_timestamp(timestamp_raw)
         ack_field = payload.get("ack")
         ack_status = _normalize_ack_status(ack_field) if ack_field is not None else (ACK_TRUE if is_sent else None)
-        return cls(timestamp=timestamp, message=message, ack_status=ack_status)
+        seq_value = payload.get("seq")
+        seq = _safe_int(seq_value) if seq_value is not None else None
+        return cls(timestamp=timestamp, message=message, ack_status=ack_status, seq=seq)
 
 
 ACK_TRUE = "true"
@@ -117,6 +122,7 @@ class History:
         self._storage_path = Path(storage_path)
         self._conversations: Dict[str, Conversation] = {}
         self._order: List[str] = []
+        self._seq_index: Dict[int, Tuple[str, MessageRecord]] = {}
         self._storage_path.parent.mkdir(parents=True, exist_ok=True)
         self.reload()
 
@@ -138,12 +144,14 @@ class History:
 
         self._conversations.clear()
         self._order.clear()
+        self._seq_index.clear()
         for entry in data:
             if not isinstance(entry, dict):
                 raise ValueError("Every conversation entry must be an object.")
             conversation = Conversation.from_dict(entry)
             self._conversations[conversation.mac] = conversation
             self._order.append(conversation.mac)
+            self._register_conversation_sequences(conversation)
 
     def save(self) -> None:
         conversations = [self._conversations[mac].to_dict() for mac in self._order]
@@ -170,24 +178,53 @@ class History:
             self._order.append(mac)
         return self._conversations[mac]
 
+    def _register_conversation_sequences(self, conversation: Conversation) -> None:
+        for record in conversation.sent_messages:
+            self._index_sequence(conversation.mac, record)
+        for record in conversation.received_messages:
+            self._index_sequence(conversation.mac, record)
+
     def delete_contact(self, mac: str, persist: bool = True) -> None:
         mac = _normalize_mac(mac)
         if mac in self._conversations:
             del self._conversations[mac]
             self._order = [m for m in self._order if m != mac]
+            self._rebuild_seq_index()
             if persist:
                 self.save()
 
     def record_sent_message(
-        self, mac: str, message: str, *, timestamp: datetime | None = None, ack_status: Optional[str] = None, persist: bool = True
+        self,
+        mac: str,
+        message: str,
+        *,
+        timestamp: datetime | None = None,
+        ack_status: Optional[str] = None,
+        seq: Optional[int] = None,
+        persist: bool = True,
     ) -> "MessageRecord":
-        record = self._append_message(mac, message, direction="sent", timestamp=timestamp, ack_status=ack_status or ACK_OUTSTANDING)
+        record = self._append_message(
+            mac,
+            message,
+            direction="sent",
+            timestamp=timestamp,
+            ack_status=ack_status or ACK_OUTSTANDING,
+            seq=seq,
+        )
         if persist:
             self.save()
         return record
 
-    def record_received_message(self, mac: str, message: str, *, timestamp: datetime | None = None, persist: bool = True) -> "MessageRecord":
-        record = self._append_message(mac, message, direction="received", timestamp=timestamp)
+    def record_received_message(
+        self,
+        mac: str,
+        message: str,
+        *,
+        timestamp: datetime | None = None,
+        seq: Optional[int] = None,
+        persist: bool = True,
+    ) -> "MessageRecord":
+        record = self._append_message(mac, message, direction="received", timestamp=timestamp, seq=seq)
         if persist:
             self.save()
         return record
@@ -203,6 +240,19 @@ class History:
             self.save()
         return True
 
+    def set_ack_status_by_seq(self, seq: int, status: Union[str, bool], *, persist: bool = True) -> bool:
+        entry = self._seq_index.get(seq)
+        if not entry:
+            return False
+        normalized = _normalize_ack_status(status)
+        record = entry[1]
+        if record.ack_status == normalized:
+            return False
+        record.ack_status = normalized
+        if persist:
+            self.save()
+        return True
+
     def fail_pending_ack(self, mac: str, timestamp: Union[datetime, str], *, persist: bool = True) -> bool:
         mac = _normalize_mac(mac)
         record = self._find_sent_record(mac, timestamp)
@@ -213,26 +263,53 @@ class History:
             self.save()
         return True
 
+    def set_sequence_for_message(
+        self, mac: str, timestamp: Union[datetime, str], seq: int, *, persist: bool = True
+    ) -> bool:
+        mac = _normalize_mac(mac)
+        record = self._find_sent_record(mac, timestamp)
+        if record is None:
+            return False
+        if record.seq == seq:
+            return False
+        if record.seq is not None and record.seq != seq:
+            self._remove_sequence(record)
+        record.seq = seq
+        self._index_sequence(mac, record)
+        if persist:
+            self.save()
+        return True
+
     def clear(self, persist: bool = True) -> None:
         self._conversations.clear()
         self._order.clear()
+        self._seq_index.clear()
         if persist:
             self.save()
 
-    def _append_message(self, mac: str, message: str, direction: str, timestamp: datetime | None = None, ack_status: Optional[str] = None) -> MessageRecord:
+    def _append_message(
+        self,
+        mac: str,
+        message: str,
+        direction: str,
+        timestamp: datetime | None = None,
+        ack_status: Optional[str] = None,
+        seq: Optional[int] = None,
+    ) -> MessageRecord:
         if not isinstance(message, str):
             raise TypeError("Messages must be strings.")
         mac = _normalize_mac(mac)
         conversation = self.ensure_contact(mac)
         ts = timestamp or _now_utc()
         ack = _normalize_ack_status(ack_status) if ack_status is not None else (ACK_OUTSTANDING if direction == "sent" else None)
-        record = MessageRecord(timestamp=ts, message=message, ack_status=ack)
+        record = MessageRecord(timestamp=ts, message=message, ack_status=ack, seq=seq)
         if direction == "sent":
             conversation.sent_messages.append(record)
         elif direction == "received":
             conversation.received_messages.append(record)
         else:
             raise ValueError("Unsupported direction provided to _append_message.")
+        self._index_sequence(mac, record)
         return record
 
     def _find_sent_record(self, mac: str, timestamp: Union[datetime, str]) -> Optional[MessageRecord]:
@@ -244,6 +321,23 @@ class History:
             if record.timestamp == target_ts:
                 return record
         return None
+
+    def _index_sequence(self, mac: str, record: MessageRecord) -> None:
+        if record.seq is None:
+            return
+        existing = self._seq_index.get(record.seq)
+        if existing and existing[1] is not record:
+            raise ValueError(f"Duplicate sequence number {record.seq} detected for {mac}.")
+        self._seq_index[record.seq] = (mac, record)
+
+    def _remove_sequence(self, record: MessageRecord) -> None:
+        if record.seq is not None:
+            self._seq_index.pop(record.seq, None)
+
+    def _rebuild_seq_index(self) -> None:
+        self._seq_index.clear()
+        for conversation in self._conversations.values():
+            self._register_conversation_sequences(conversation)
 
 
 _LEGACY_COUNTERS: Dict[str, int] = {"SentMessages": 0, "ReceivedMessages": 0}
@@ -308,3 +402,14 @@ def _coerce_timestamp(value: Union[datetime, str]) -> datetime:
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=timezone.utc)
     return ts.astimezone(timezone.utc)
+
+
+def _safe_int(value: Union[str, int, None]) -> Optional[int]:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return None
+    return None
