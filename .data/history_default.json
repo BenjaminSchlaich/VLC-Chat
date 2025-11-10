@@ -25,6 +25,31 @@
         ]
     },
     {
+        "MAC": "XY",
+        "SentMessages": [
+            {
+                "timestamp": "2025-11-02T14:36:20Z",
+                "message": "message 1",
+                "ack": "true"
+            },
+            {
+                "timestamp": "2025-11-03T14:39:38Z",
+                "message": "message 23?",
+                "ack": "true"
+            }
+        ],
+        "ReceivedMessages": [
+            {
+                "timestamp": "2025-11-03T14:37:41Z",
+                "message": "message"
+            },
+            {
+                "timestamp": "2025-11-08T14:40:51Z",
+                "message": "more message."
+            }
+        ]
+    },
+    {
         "MAC": "FF",
         "SentMessages": [
             {
