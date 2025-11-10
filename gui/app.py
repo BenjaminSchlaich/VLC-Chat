@@ -76,7 +76,6 @@ class ChatApp:
             if stats:
                 self._logger.info("RX stats: %s", stats)
             seq = stats.get("seq") if stats else None
-            seq = stats.get("seq") if stats else None
             record = self.history.record_received_message(mac, message, seq=seq)
             self.refresh_contacts()
             self.chat_view.append_message(mac, "received", record)
