@@ -181,9 +181,9 @@ class History:
 
     def _register_conversation_sequences(self, conversation: Conversation) -> None:
         for record in conversation.sent_messages:
-            self._index_sequence(conversation.mac, record)
+            self._index_sequence(conversation.mac, record, direction="sent")
         for record in conversation.received_messages:
-            self._index_sequence(conversation.mac, record)
+            self._index_sequence(conversation.mac, record, direction="received")
 
     def delete_contact(self, mac: str, persist: bool = True) -> None:
         mac = _normalize_mac(mac)
@@ -274,9 +274,9 @@ class History:
         if record.seq == seq:
             return False
         if record.seq is not None and record.seq != seq:
-            self._remove_sequence(record)
+            self._remove_sequence(mac, record)
         record.seq = seq
-        self._index_sequence(mac, record)
+        self._index_sequence(mac, record, direction="sent")
         if persist:
             self.save()
         return True
@@ -310,7 +310,7 @@ class History:
             conversation.received_messages.append(record)
         else:
             raise ValueError("Unsupported direction provided to _append_message.")
-        self._index_sequence(mac, record)
+        self._index_sequence(mac, record, direction=direction)
         return record
 
     def _find_sent_record(self, mac: str, timestamp: Union[datetime, str]) -> Optional[MessageRecord]:
@@ -323,8 +323,8 @@ class History:
                 return record
         return None
 
-    def _index_sequence(self, mac: str, record: MessageRecord) -> None:
-        if record.seq is None:
+    def _index_sequence(self, mac: str, record: MessageRecord, *, direction: str) -> None:
+        if direction != "sent" or record.seq is None:
             return
         key = (_normalize_mac(mac), record.seq)
         existing = self._seq_index.get(key)
@@ -332,12 +332,11 @@ class History:
             raise ValueError(f"Duplicate sequence number {record.seq} detected for {mac}.")
         self._seq_index[key] = record
 
-    def _remove_sequence(self, record: MessageRecord) -> None:
-        if record.seq is not None:
-            for key, value in list(self._seq_index.items()):
-                if value is record:
-                    self._seq_index.pop(key, None)
-                    break
+    def _remove_sequence(self, mac: str, record: MessageRecord) -> None:
+        if record.seq is None:
+            return
+        key = (_normalize_mac(mac), record.seq)
+        self._seq_index.pop(key, None)
 
     def _rebuild_seq_index(self) -> None:
         self._seq_index.clear()

@@ -2,19 +2,24 @@
     {
         "MAC": "CD",
         "SentMessages": [
-            
+            {
+                "timestamp": "2025-11-10T15:06:09.197479Z",
+                "message": "hola",
+                "ack": "false",
+                "seq": 0
+            },
+            {
+                "timestamp": "2025-11-10T15:06:32.455324Z",
+                "message": "hola",
+                "ack": "true",
+                "seq": 1
+            }
         ],
-        "ReceivedMessages": [
-            
-        ]
+        "ReceivedMessages": []
     },
     {
         "MAC": "FF",
-        "SentMessages": [
-            
-        ],
-        "ReceivedMessages": [
-            
-        ]
+        "SentMessages": [],
+        "ReceivedMessages": []
     }
 ]
