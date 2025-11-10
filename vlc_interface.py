@@ -7,8 +7,14 @@ import time
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from typing import Callable, Deque, Dict, List, Optional
-import serial
-from serial import Serial, SerialException
+
+try:
+    import serial
+    from serial import Serial, SerialException
+except ImportError:  # pragma: no cover - optional dependency for tests
+    serial = None
+    Serial = None
+    SerialException = Exception  # type: ignore[assignment]
 
 
 class VLCInterface:
@@ -195,11 +201,18 @@ class VLCInterface:
 
         if inner.startswith("R,"):
             parts = inner.split(",", 2)
-            if len(parts) < 3:
+            if len(parts) < 2:
                 return
-            payload = parts[2]
-            message = _sanitize_payload(payload)
-            self._pending_rx.append({"message": message, "raw": payload, "received_at": datetime.now(timezone.utc)})
+            frame_type = parts[1]
+            payload = parts[2] if len(parts) > 2 else ""
+            if frame_type.startswith("D"):
+                message = _sanitize_payload(payload)
+                self._pending_rx.append({"message": message, "raw": payload, "received_at": datetime.now(timezone.utc)})
+            elif frame_type.startswith("A"):
+                self._logger.debug("Received ACK payload: %s", payload)
+            else:
+                self._logger.debug("Unhandled frame type %s with payload %s", frame_type, payload)
+            return
         elif inner.startswith("P,"):
             parts = inner.split(",", 2)
             if len(parts) < 3:
@@ -207,27 +220,30 @@ class VLCInterface:
             status = parts[1]
             mac = parts[2].strip().upper()
             self._handle_ack_update(mac, status == "1")
+            return
         else:
             self._logger.debug("Unhandled message event: %s", inner)
 
     def _handle_ack_update(self, mac: str, success: bool) -> None:
-        timestamp_iso: Optional[str] = None
         with self._acks_lock:
             queue = self._pending_acks.get(mac)
-            if queue:
+            if not queue:
+                if success:
+                    self._logger.warning("Dispatch success reported for %s but no pending messages.", mac)
+                    return
+                timestamp_iso = None
+            elif success:
+                self._logger.debug("Frame dispatch confirmed for %s", mac)
+                return
+            else:
                 timestamp_iso = queue.popleft()
                 if not queue:
                     self._pending_acks.pop(mac, None)
 
-        if not timestamp_iso:
-            self._logger.warning("Ack event for %s with no pending messages (success=%s)", mac, success)
-            return
-
-        if success:
-            for callback in self._ack_callbacks:
-                callback(mac, timestamp_iso)
-        else:
+        if timestamp_iso:
             self._logger.warning("Device reported drop for %s @ %s", mac, timestamp_iso)
+        else:
+            self._logger.warning("Drop reported for %s but no pending messages", mac)
 
     def _handle_stats_event(self, line: str) -> None:
         inner = _strip_brackets(line)
@@ -240,14 +256,39 @@ class VLCInterface:
         stats = _parse_stats(fields)
         stats["raw"] = line
 
-        if stats.get("mode") == "R" and self._pending_rx:
+        msg_type = stats.get("type") or ""
+
+        if stats.get("mode") == "R" and msg_type.startswith("A"):
+            src = stats.get("src")
+            if isinstance(src, str) and src.strip():
+                self._handle_remote_ack(src.strip().upper())
+
+        if stats.get("mode") == "R" and msg_type.startswith("D") and self._pending_rx:
             pending = self._pending_rx.popleft()
-            src = str(stats.get("src") or stats.get("dest") or "")
+            src = stats.get("src") or stats.get("dest") or ""
+            if isinstance(src, str):
+                src = src.upper()
             for callback in self._message_callbacks:
                 callback(src, pending["message"], stats)
 
         for cb in self._stats_callbacks:
             cb(stats)
+
+    def _handle_remote_ack(self, mac: str) -> None:
+        timestamp_iso: Optional[str] = None
+        with self._acks_lock:
+            queue = self._pending_acks.get(mac)
+            if queue:
+                timestamp_iso = queue.popleft()
+                if not queue:
+                    self._pending_acks.pop(mac, None)
+
+        if not timestamp_iso:
+            self._logger.warning("Received remote ACK from %s but no pending messages.", mac)
+            return
+
+        for callback in self._ack_callbacks:
+            callback(mac, timestamp_iso)
 
 
 # ---------------------------------------------------------------------- Utility helpers
@@ -285,9 +326,9 @@ def _parse_stats(fields: List[str]) -> Dict[str, object]:
         stats["path"] = path
         src, dest = _split_path(path)
         if src:
-            stats["src"] = src
+            stats["src"] = src.upper()
         if dest:
-            stats["dest"] = dest
+            stats["dest"] = dest.upper()
     if len(fields) > 3:
         size, txsize = _parse_size_field(fields[3])
         stats["size"] = size

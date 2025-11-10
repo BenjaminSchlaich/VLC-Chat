@@ -4,7 +4,7 @@ import time
 import serial
 
 
-PORT = "/dev/cu.usbmodem14201"
+PORT = "/dev/cu.usbmodem14101"
 BAUDRATE = 115200
 TIMEOUT = None  # blocking mode
 
