@@ -1,7 +1,8 @@
 {
-    "MAC": "AB",
+    "MAC": "CD",
     "FEC_THRESHOLD": 30,
     "CHANNEL_BUSY_THRESHOLD": 20,
     "N_RETRANSMISSIONS": 5,
-    "SERIAL_PORT": "/dev/cu.usbmodem14101"
+    "SERIAL_PORT": "COM3",
+    "RECV_COLOR": "black"
 }
