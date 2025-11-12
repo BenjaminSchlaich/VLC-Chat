@@ -19,7 +19,10 @@ time.sleep(0.1)  # wait for settings to be applied
 s.write(str.encode("c[1,0,5]\n"))  # set number of retransmissions to 5
 time.sleep(0.1)  # wait for settings to be applied
 s.write(str.encode("c[2,0,7]\n"))  # set FEC threshold to 30 (payload >= 30)
+time.sleep(0.1)  # wait for settings to be applied
+s.write(str.encode("c[0,2,5]\n"))  # set CHANNEL_BUSY_THRESHOLD
 time.sleep(0.1)  # wait for settings to be appliedstr.encode("a[AB]\n")
 
+print("device configured.")
 
-s.write(str.encode("m[hello world!\0,CD]\n"))  # send message to device with address CD
+s.write(str.encode("m[hello world!\0,FF]\n"))  # send message to device with address CD

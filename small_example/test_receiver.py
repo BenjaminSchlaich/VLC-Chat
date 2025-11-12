@@ -4,7 +4,7 @@ import sys
 import serial
 
 
-PORT = "/dev/cu.usbmodem14101"
+PORT = "/dev/cu.usbmodem14201"
 BAUDRATE = 115200
 TIMEOUT = None  # blocking mode
 
@@ -18,15 +18,13 @@ s.write(str.encode("a[CD]\n"))
 #read from the device’s serial port (should be done in a separate program):  
 message = ""  
 while True: #while not terminated  
- try:  
-   byte = s.read(1) #read one byte (blocks until data available or timeout reached)  
-   val = chr(byte[0])  
-   if val=='\n': #if termination character reached  
-     print (message) #print message  
-     message = "" #reset message  
-   else:  
-     message = message + val #concatenate the message  
- except serial.SerialException:  
-   continue #on timeout try to read again  
- except KeyboardInterrupt:  
-   sys.exit() #on ctrl-c terminate program
+  try:  
+    line_bytes = s.readline()
+    # line = line_bytes.decode("utf-8", errors="ignore")
+    # print(line)
+  except serial.SerialException:  
+    continue #on timeout try to read again  
+  except KeyboardInterrupt:  
+    sys.exit() #on ctrl-c terminate program
+  except Exception:
+    print("Illegal input")

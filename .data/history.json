@@ -2,19 +2,60 @@
     {
         "MAC": "CD",
         "SentMessages": [
-            
+            {
+                "timestamp": "2025-11-12T22:39:59.044029Z",
+                "message": "This first message should receive an acknowledgement",
+                "ack": "true",
+                "seq": 0
+            },
+            {
+                "timestamp": "2025-11-12T22:40:40.132665Z",
+                "message": "Before sending this second message, we diverted the LEDs. So it should not be acked and turn red.",
+                "ack": "false",
+                "seq": 1
+            },
+            {
+                "timestamp": "2025-11-12T22:41:52.762717Z",
+                "message": "Finally, this last message should be acked again.",
+                "ack": "true",
+                "seq": 2
+            }
         ],
         "ReceivedMessages": [
-            
+            {
+                "timestamp": "2025-11-12T22:41:30.872977Z",
+                "message": "This message is sent from CD to AB. Received messages are displayed in white, since it is not known to the receiver whether the sender received the ack or not.",
+                "seq": 0
+            },
+            {
+                "timestamp": "2025-11-12T22:43:50.752900Z",
+                "message": "Sending to broadcast, will be received within the chat corresponding to this sender station (CD).",
+                "seq": 1
+            }
         ]
     },
     {
         "MAC": "FF",
         "SentMessages": [
-            
+            {
+                "timestamp": "2025-11-12T22:42:25.597045Z",
+                "message": "In the broadcast, messages are never acked and therefore always turn red.",
+                "ack": "false",
+                "seq": 3
+            },
+            {
+                "timestamp": "2025-11-12T22:42:33.711109Z",
+                "message": "As we can see clearly here.",
+                "ack": "false",
+                "seq": 4
+            },
+            {
+                "timestamp": "2025-11-12T22:43:12.087225Z",
+                "message": "However, as we will show now by receiving one message, they show up in the personal chat next.",
+                "ack": "false",
+                "seq": 5
+            }
         ],
-        "ReceivedMessages": [
-            
-        ]
+        "ReceivedMessages": []
     }
 ]
